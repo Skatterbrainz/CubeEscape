@@ -7,6 +7,8 @@ click it to slide it off. Clear every arrow on all six faces to finish the
 level. Click one that is blocked and it shakes, the arrow in its way flashes
 red, and you pick up a mistake. There is no timer.
 
+<img src="./assets/Cube Escape_001.png" alt="Cube Escape" />
+
 ## Requirements
 
 - Linux platform (tested on Linux Mint 22)

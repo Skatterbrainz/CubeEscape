@@ -19,6 +19,7 @@ cleanly after one task.
 - [x] Headless PNG renderer for checking the look (`examples/snapshot.rs`)
 - [x] 27 unit tests; the real window was driven with synthetic mouse and keys
 
+- [x] Grid size selector: Auto or fixed 4x4 to 16x16, with `[` `]` keys and on-screen -/+ buttons
 - [x] Larger grids: 6x6 per face on level 1, growing to 12x12; longer arrows; cube drawn larger; zoom up to 3x
 
 ## Ship it
@@ -40,7 +41,7 @@ cleanly after one task.
 ## Gameplay polish (any order, all independent)
 
 - [ ] **D. Save progress** (S)
-  Remember the highest level reached in `$XDG_DATA_HOME` (or `~/.local/share`) as a tiny text file, and resume there. Add a round-trip test that uses a temp dir.
+  Remember the highest level reached and the chosen grid size in `$XDG_DATA_HOME` (or `~/.local/share`) as a tiny text file, and resume there. Add a round-trip test that uses a temp dir.
   Touches: new `src/save.rs`, `src/main.rs`.
   *Done when:* quitting and relaunching continues from the same level.
 

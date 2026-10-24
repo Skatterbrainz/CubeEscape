@@ -19,6 +19,7 @@ red, and you pick up a mistake. There is no timer.
 | `H` | Hint: highlight an arrow you can remove right now |
 | `R` | Restart the level |
 | `V` | Reset the view |
+| `[` / `]`, or the `-` / `+` buttons | Choose the grid size: Auto, then 4x4 up to 16x16. Changing it restarts the current level on the new grid |
 | Enter / Space / click | Next level, once a level is cleared |
 | `Esc` | Quit |
 
@@ -55,7 +56,7 @@ The code is split so that nothing but `src/main.rs` touches the window:
 
 ### How levels are made
 
-Each face is an `N x N` grid (6 on level 1, growing to 12 as levels rise). The generator tiles
+Each face is an `N x N` grid (by default 6 on level 1, growing to 12 as levels rise; the player can instead fix it anywhere from 4 to 16). The generator tiles
 a face with random snake-shaped lines, then repeatedly looks for deadlocks, where
 arrows block each other in a cycle. It breaks each one by turning an arrow
 around or deleting it, until greedily removing whatever is free clears the

@@ -17,6 +17,12 @@
 /// Number of faces on the cube.
 pub const FACE_COUNT: usize = 6;
 
+/// Cells per side of each face on level 1.
+pub const MIN_FACE_SIZE: i32 = 6;
+
+/// Cells per side of each face once levels have grown as far as they go.
+pub const MAX_FACE_SIZE: i32 = 12;
+
 /// Number of distinct line colours the generator hands out.
 pub const PALETTE_SIZE: usize = 10;
 
@@ -230,8 +236,8 @@ impl LevelParams {
     pub fn for_level(level: u32) -> LevelParams {
         let level = level.max(1);
         LevelParams {
-            size: (4 + ((level - 1) / 2) as i32).min(8),
-            max_len: (3 + (level / 2) as usize).min(10),
+            size: (MIN_FACE_SIZE + ((level - 1) / 2) as i32).min(MAX_FACE_SIZE),
+            max_len: (4 + (level / 2) as usize).min(12),
         }
     }
 }
@@ -640,8 +646,12 @@ mod tests {
 
     #[test]
     fn levels_get_bigger() {
-        assert_eq!(LevelParams::for_level(1).size, 4);
+        assert_eq!(LevelParams::for_level(1).size, MIN_FACE_SIZE);
         assert!(LevelParams::for_level(9).size > LevelParams::for_level(1).size);
-        assert_eq!(LevelParams::for_level(999).size, 8);
+        assert_eq!(LevelParams::for_level(999).size, MAX_FACE_SIZE);
+        // Sizes never shrink as levels rise.
+        for level in 1..60 {
+            assert!(LevelParams::for_level(level + 1).size >= LevelParams::for_level(level).size);
+        }
     }
 }

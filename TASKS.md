@@ -19,6 +19,8 @@ cleanly after one task.
 - [x] Headless PNG renderer for checking the look (`examples/snapshot.rs`)
 - [x] 27 unit tests; the real window was driven with synthetic mouse and keys
 
+- [x] Larger grids: 6x6 per face on level 1, growing to 12x12; longer arrows; cube drawn larger; zoom up to 3x
+
 ## Ship it
 
 - [ ] **A. Get v0.1 into the repo** (S)

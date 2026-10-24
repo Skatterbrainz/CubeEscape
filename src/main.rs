@@ -107,7 +107,7 @@ async fn main() {
         // Mouse wheel zoom.
         let (_, wheel) = mouse_wheel();
         if wheel != 0.0 {
-            view.zoom = (view.zoom * (1.0 + wheel.signum() * 0.08)).clamp(0.5, 2.0);
+            view.zoom = (view.zoom * (1.0 + wheel.signum() * 0.08)).clamp(0.5, 3.0);
         }
 
         // Mouse: a short press is a click, a longer move is a drag-to-rotate.

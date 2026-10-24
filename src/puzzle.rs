@@ -23,6 +23,9 @@ pub const MIN_FACE_SIZE: i32 = 6;
 /// Cells per side of each face once levels have grown as far as they go.
 pub const MAX_FACE_SIZE: i32 = 12;
 
+/// Cells per side of each face when the game starts.
+pub const DEFAULT_GRID_SIZE: i32 = 10;
+
 /// Smallest grid the player can pick.
 pub const MIN_GRID_SIZE: i32 = 4;
 
@@ -237,6 +240,13 @@ pub enum GridSize {
     Auto,
     /// The same `n x n` grid on every level.
     Fixed(i32),
+}
+
+impl Default for GridSize {
+    /// A fixed `DEFAULT_GRID_SIZE` grid. `Auto` is still on the selector.
+    fn default() -> GridSize {
+        GridSize::Fixed(DEFAULT_GRID_SIZE)
+    }
 }
 
 impl GridSize {
@@ -941,6 +951,18 @@ mod tests {
             assert_eq!(g, GridSize::Fixed(n));
         }
         assert_eq!(g.smaller(), GridSize::Auto);
+    }
+
+    #[test]
+    fn the_default_grid_is_ten_by_ten_and_inside_the_selectable_range() {
+        assert_eq!(GridSize::default(), GridSize::Fixed(10));
+        assert!((MIN_GRID_SIZE..=MAX_GRID_SIZE).contains(&DEFAULT_GRID_SIZE));
+        // Auto is still reachable from the default by stepping down.
+        let mut g = GridSize::default();
+        while g.can_shrink() {
+            g = g.smaller();
+        }
+        assert_eq!(g, GridSize::Auto);
     }
 
     #[test]

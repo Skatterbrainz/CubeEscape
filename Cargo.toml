@@ -1,0 +1,33 @@
+[package]
+name = "cube-escape"
+version = "0.1.0"
+edition = "2021"
+description = "A 3D cube puzzle: rotate the cube and slide the arrows off, one clear path at a time"
+license = "MIT"
+repository = "https://github.com/Skatterbrainz/CubeEscape"
+readme = "README.md"
+keywords = ["game", "puzzle", "3d"]
+categories = ["games"]
+
+[lib]
+name = "cube_escape"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cube-escape"
+path = "src/main.rs"
+
+[dependencies]
+# No default features: avoids the audio backend (and its ALSA build dependency).
+macroquad = { version = "0.4", default-features = false }
+glam = "0.29"
+
+[dev-dependencies]
+# Used only by examples/snapshot.rs to render PNGs without a window.
+tiny-skia = "0.11"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

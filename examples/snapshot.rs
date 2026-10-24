@@ -64,6 +64,16 @@ fn main() {
         &dir.join("2_level8_rotated.png"),
     );
 
+    // 2b. The largest grids, at the default angle.
+    let game = Game::new(20);
+    let view = View::new(w as f32, h as f32);
+    render(
+        &build_scene(&game, &view, None),
+        w,
+        h,
+        &dir.join("2b_level20_largest.png"),
+    );
+
     // 3. Mid-slide: remove a visible free line and freeze the animation.
     let mut game = Game::new(5);
     let view = View::new(w as f32, h as f32);

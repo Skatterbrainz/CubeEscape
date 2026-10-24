@@ -95,7 +95,7 @@ impl View {
 
     /// Pixels per cube half-width at the centre depth.
     pub fn scale(&self) -> f32 {
-        self.width.min(self.height) * 0.21 * self.zoom
+        self.width.min(self.height) * 0.235 * self.zoom
     }
 
     fn center(&self) -> Vec2 {

@@ -55,7 +55,7 @@ The code is split so that nothing but `src/main.rs` touches the window:
 
 ### How levels are made
 
-Each face is an `N x N` grid (4 up to 8 as levels rise). The generator tiles
+Each face is an `N x N` grid (6 on level 1, growing to 12 as levels rise). The generator tiles
 a face with random snake-shaped lines, then repeatedly looks for deadlocks, where
 arrows block each other in a cycle. It breaks each one by turning an arrow
 around or deleting it, until greedily removing whatever is free clears the

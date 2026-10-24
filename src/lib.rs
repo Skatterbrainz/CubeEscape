@@ -1,6 +1,7 @@
 //! Cube Escape: rotate a cube and slide its arrows away, one clear path at a time.
 
 pub mod game;
+pub mod icon;
 pub mod puzzle;
 pub mod scene;
 

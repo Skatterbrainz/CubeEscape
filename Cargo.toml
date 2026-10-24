@@ -21,6 +21,8 @@ path = "src/main.rs"
 # No default features: avoids the audio backend (and its ALSA build dependency).
 macroquad = { version = "0.4", default-features = false }
 glam = "0.29"
+# Decodes the embedded window-icon PNGs. Same major version macroquad uses.
+image = { version = "0.24", default-features = false, features = ["png"] }
 
 [dev-dependencies]
 # Used only by examples/snapshot.rs to render PNGs without a window.

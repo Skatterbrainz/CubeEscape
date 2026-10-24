@@ -15,6 +15,7 @@ const DRAG_SENSITIVITY: f32 = 0.0065;
 const KEY_TURN_SPEED: f32 = 1.8;
 
 fn window_conf() -> Conf {
+    let icon = cube_escape::icon::window_icon();
     Conf {
         window_title: GAME_TITLE.to_owned(),
         window_width: 1000,
@@ -22,6 +23,11 @@ fn window_conf() -> Conf {
         high_dpi: true,
         sample_count: 4,
         window_resizable: true,
+        icon: Some(macroquad::miniquad::conf::Icon {
+            small: icon.small,
+            medium: icon.medium,
+            big: icon.big,
+        }),
         ..Default::default()
     }
 }

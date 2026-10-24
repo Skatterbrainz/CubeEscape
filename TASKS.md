@@ -19,6 +19,7 @@ cleanly after one task.
 - [x] Headless PNG renderer for checking the look (`examples/snapshot.rs`)
 - [x] 27 unit tests; the real window was driven with synthetic mouse and keys
 
+- [x] Longer, windier arrows: long winding arrows that can run most of the way across a face, with many bends; faces about 96% full
 - [x] Grid size selector: Auto or fixed 4x4 to 16x16, with `[` `]` keys and on-screen -/+ buttons
 - [x] Larger grids: 6x6 per face on level 1, growing to 12x12; longer arrows; cube drawn larger; zoom up to 3x
 

@@ -56,10 +56,16 @@ The code is split so that nothing but `src/main.rs` touches the window:
 
 ### How levels are made
 
-Each face is an `N x N` grid (by default 6 on level 1, growing to 12 as levels rise; the player can instead fix it anywhere from 4 to 16). The generator tiles
-a face with random snake-shaped lines, then repeatedly looks for deadlocks, where
-arrows block each other in a cycle. It breaks each one by turning an arrow
-around or deleting it, until greedily removing whatever is free clears the
+Each face is an `N x N` grid (by default 6 on level 1, growing to 12 as levels
+rise; the player can instead fix it anywhere from 4 to 16).
+
+The generator first lays down a handful of long winding arrows. They prefer to
+keep going straight and to hug walls and tight spots, so they sweep across much
+of the face with many bends, up to about a third of the face's cells. Then it
+fills every gap with shorter arrows. After that it looks for deadlocks, where
+arrows block each other in a cycle, and breaks each one by turning an arrow
+around or deleting the shortest arrow in the cycle. The holes that leaves are
+refilled and checked again, until greedily removing whatever is free clears the
 board. Removing an arrow never blocks another, so that check proves the level
 is solvable. Levels come from a fixed seed, so level N is the same every time.
 

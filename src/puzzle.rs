@@ -279,26 +279,46 @@ impl GridSize {
 pub struct LevelParams {
     /// Cells per side of each face.
     pub size: i32,
-    /// Longest line, in cells.
+    /// Longest of the short filler lines, in cells.
     pub max_len: usize,
+    /// Longest of the long winding lines, in cells. These can run most of the
+    /// way across a face.
+    pub long_len: usize,
+    /// How many long lines to try to lay down before filling the gaps.
+    pub long_count: usize,
 }
 
 impl LevelParams {
+    fn with_size(level: u32, size: i32) -> LevelParams {
+        let cells = (size * size) as usize;
+        LevelParams {
+            size,
+            max_len: (4 + (level / 2) as usize).min(12),
+            long_len: (cells / 3).clamp(10, 60),
+            long_count: (size / 2) as usize,
+        }
+    }
+
+    /// The parameters for a level when the grid grows with the level.
     pub fn for_level(level: u32) -> LevelParams {
         let level = level.max(1);
-        LevelParams {
-            size: (MIN_FACE_SIZE + ((level - 1) / 2) as i32).min(MAX_FACE_SIZE),
-            max_len: (4 + (level / 2) as usize).min(12),
-        }
+        let size = (MIN_FACE_SIZE + ((level - 1) / 2) as i32).min(MAX_FACE_SIZE);
+        LevelParams::with_size(level, size)
     }
 
     /// Like `for_level`, but with the grid size the player asked for.
     pub fn for_level_with(level: u32, grid: GridSize) -> LevelParams {
-        let mut params = LevelParams::for_level(level);
-        if let GridSize::Fixed(n) = grid {
-            params.size = n.clamp(MIN_GRID_SIZE, MAX_GRID_SIZE);
+        match grid {
+            GridSize::Auto => LevelParams::for_level(level),
+            GridSize::Fixed(n) => {
+                LevelParams::with_size(level.max(1), n.clamp(MIN_GRID_SIZE, MAX_GRID_SIZE))
+            }
         }
-        params
+    }
+
+    /// The longest a line can be on this level.
+    pub fn longest(&self) -> usize {
+        self.max_len.max(self.long_len)
     }
 }
 
@@ -325,40 +345,93 @@ fn stuck_lines(face: &Face) -> Vec<usize> {
         .collect()
 }
 
-/// Cover the grid with random snake-like lines, leaving only the odd cell
-/// that no line could reach.
-fn tile_face(params: &LevelParams, rng: &mut Rng) -> Vec<Line> {
-    let n = params.size;
-    let total = (n * n) as usize;
-    let mut occupied = vec![false; total];
-    let mut order: Vec<usize> = (0..total).collect();
-    rng.shuffle(&mut order);
-    let mut lines = Vec::new();
+/// Grow a self-avoiding path from `start`, marking each cell it takes in
+/// `occupied`, until it has `want` cells or runs out of room.
+///
+/// A winding path prefers to keep going straight, then to hug cells that have
+/// few free neighbours (which sweeps it along walls and into pockets instead
+/// of curling up on itself). Both give long paths with many bends that cross
+/// a good part of the face.
+fn grow_path(
+    start: (i32, i32),
+    want: usize,
+    occupied: &mut [bool],
+    n: i32,
+    winding: bool,
+    rng: &mut Rng,
+) -> Vec<(i32, i32)> {
+    let free = |occupied: &[bool], x: i32, y: i32| {
+        x >= 0 && y >= 0 && x < n && y < n && !occupied[(y * n + x) as usize]
+    };
+    occupied[(start.1 * n + start.0) as usize] = true;
+    let mut path = vec![start];
+    while path.len() < want {
+        let (cx, cy) = *path.last().unwrap();
+        let options: Vec<(i32, i32)> = Dir::ALL
+            .iter()
+            .map(|d| {
+                let (dx, dy) = d.delta();
+                (cx + dx, cy + dy)
+            })
+            .filter(|&(x, y)| free(occupied, x, y))
+            .collect();
+        if options.is_empty() {
+            break;
+        }
+        let next = if winding {
+            let roll = rng.below(100);
+            let straight = if path.len() >= 2 {
+                let (px, py) = path[path.len() - 2];
+                let (dx, dy) = (cx - px, cy - py);
+                options.iter().copied().find(|&o| o == (cx + dx, cy + dy))
+            } else {
+                None
+            };
+            if let (true, Some(s)) = (roll < 55, straight) {
+                s
+            } else if roll < 85 {
+                // Tuck into the tightest spot.
+                let degree = |&(x, y): &(i32, i32)| {
+                    Dir::ALL
+                        .iter()
+                        .filter(|d| {
+                            let (dx, dy) = d.delta();
+                            free(occupied, x + dx, y + dy)
+                        })
+                        .count()
+                };
+                let best = options.iter().map(degree).min().unwrap();
+                let tight: Vec<(i32, i32)> = options
+                    .iter()
+                    .copied()
+                    .filter(|o| degree(o) == best)
+                    .collect();
+                tight[rng.below(tight.len())]
+            } else {
+                options[rng.below(options.len())]
+            }
+        } else {
+            options[rng.below(options.len())]
+        };
+        occupied[(next.1 * n + next.0) as usize] = true;
+        path.push(next);
+    }
+    path
+}
 
-    for &c in &order {
+/// Fill every free spot that can hold a line with short random lines.
+fn fill_short(params: &LevelParams, occupied: &mut [bool], lines: &mut Vec<Line>, rng: &mut Rng) {
+    let n = params.size;
+    let mut order: Vec<usize> = (0..(n * n) as usize).collect();
+    rng.shuffle(&mut order);
+    for c in order {
         if occupied[c] {
             continue;
         }
-        occupied[c] = true;
-        let mut path = vec![(c as i32 % n, c as i32 / n)];
         let want = 2 + rng.below(params.max_len - 1);
-        while path.len() < want {
-            let (cx, cy) = *path.last().unwrap();
-            let mut options: Vec<(i32, i32)> = Vec::new();
-            for d in Dir::ALL {
-                let (dx, dy) = d.delta();
-                let (nx, ny) = (cx + dx, cy + dy);
-                if nx >= 0 && ny >= 0 && nx < n && ny < n && !occupied[(ny * n + nx) as usize] {
-                    options.push((nx, ny));
-                }
-            }
-            if options.is_empty() {
-                break;
-            }
-            let next = options[rng.below(options.len())];
-            occupied[(next.1 * n + next.0) as usize] = true;
-            path.push(next);
-        }
+        let winding = rng.chance(0.5);
+        let start = (c as i32 % n, c as i32 / n);
+        let mut path = grow_path(start, want, occupied, n, winding, rng);
         if path.len() < 2 {
             // Nothing free next to it: leave the cell empty.
             continue;
@@ -371,6 +444,49 @@ fn tile_face(params: &LevelParams, rng: &mut Rng) -> Vec<Line> {
             color: 0,
         });
     }
+}
+
+fn occupied_cells(size: i32, lines: &[Line]) -> Vec<bool> {
+    let mut occupied = vec![false; (size * size) as usize];
+    for line in lines {
+        for &(x, y) in &line.cells {
+            occupied[(y * size + x) as usize] = true;
+        }
+    }
+    occupied
+}
+
+/// Cover a face with lines: first a few long winding ones that cross much of
+/// the face, then short ones in every gap that is left.
+fn tile_face(params: &LevelParams, rng: &mut Rng) -> Vec<Line> {
+    let n = params.size;
+    let mut occupied = vec![false; (n * n) as usize];
+    let mut lines = Vec::new();
+
+    for _ in 0..params.long_count {
+        let free: Vec<usize> = (0..occupied.len()).filter(|&c| !occupied[c]).collect();
+        if free.is_empty() {
+            break;
+        }
+        let c = free[rng.below(free.len())];
+        let start = (c as i32 % n, c as i32 / n);
+        // Between half and all of the longest length.
+        let want = params.long_len / 2 + rng.below(params.long_len / 2 + 1);
+        let mut path = grow_path(start, want.max(2), &mut occupied, n, true, rng);
+        if path.len() < 2 {
+            occupied[(start.1 * n + start.0) as usize] = false;
+            continue;
+        }
+        if rng.chance(0.5) {
+            path.reverse();
+        }
+        lines.push(Line {
+            cells: path,
+            color: 0,
+        });
+    }
+
+    fill_short(params, &mut occupied, &mut lines, rng);
     lines
 }
 
@@ -378,7 +494,8 @@ fn tile_face(params: &LevelParams, rng: &mut Rng) -> Vec<Line> {
 ///
 /// A deadlock is a cycle of lines that each block the next. We find one by
 /// following blockers from any stuck line, then break it by turning one of its
-/// lines around (if that helps) or deleting it.
+/// lines around if that helps, and otherwise deleting its shortest line (so
+/// the long lines survive).
 fn break_deadlocks(size: i32, lines: &mut Vec<Line>, rng: &mut Rng) {
     loop {
         let face = clear_greedy(size, lines);
@@ -400,12 +517,19 @@ fn break_deadlocks(size: i32, lines: &mut Vec<Line>, rng: &mut Rng) {
             }
         };
 
-        let victim = cycle[rng.below(cycle.len())];
-        lines[victim].cells.reverse();
-        let after = stuck_lines(&clear_greedy(size, lines));
-        if after.len() >= stuck.len() {
-            // Turning it around did not help; take it off the board instead.
-            lines[victim].cells.reverse();
+        let mut order = cycle.clone();
+        rng.shuffle(&mut order);
+        let mut fixed = false;
+        for &v in &order {
+            lines[v].cells.reverse();
+            if stuck_lines(&clear_greedy(size, lines)).len() < stuck.len() {
+                fixed = true;
+                break;
+            }
+            lines[v].cells.reverse();
+        }
+        if !fixed {
+            let victim = *cycle.iter().min_by_key(|&&i| lines[i].cells.len()).unwrap();
             lines.remove(victim);
         }
     }
@@ -443,6 +567,18 @@ fn assign_colors(size: i32, lines: &mut [Line], rng: &mut Rng) {
 
 fn generate_face(params: &LevelParams, rng: &mut Rng) -> Face {
     let mut lines = tile_face(params, rng);
+    // Breaking deadlocks can delete lines and leave holes, so refill them and
+    // check again. Each pass only ever adds short lines.
+    for _ in 0..4 {
+        break_deadlocks(params.size, &mut lines, rng);
+        let before = lines.len();
+        let mut occupied = occupied_cells(params.size, &lines);
+        fill_short(params, &mut occupied, &mut lines, rng);
+        if lines.len() == before {
+            break;
+        }
+    }
+    // The last refill may have added a deadlock of its own.
     break_deadlocks(params.size, &mut lines, rng);
     assign_colors(params.size, &mut lines, rng);
     Face::new(params.size, lines)
@@ -668,7 +804,7 @@ mod tests {
                 let face = p.face(f);
                 let mut seen = std::collections::HashSet::new();
                 for (i, l) in face.lines().iter().enumerate() {
-                    assert!(l.cells.len() >= 2 && l.cells.len() <= params.max_len);
+                    assert!(l.cells.len() >= 2 && l.cells.len() <= params.longest());
                     assert!(l.color < PALETTE_SIZE);
                     for w in l.cells.windows(2) {
                         let d = (w[1].0 - w[0].0, w[1].1 - w[0].1);
@@ -699,6 +835,76 @@ mod tests {
                 avg * 100.0
             );
         }
+    }
+
+    fn bends(cells: &[(i32, i32)]) -> usize {
+        cells
+            .windows(3)
+            .filter(|w| (w[1].0 - w[0].0, w[1].1 - w[0].1) != (w[2].0 - w[1].0, w[2].1 - w[1].1))
+            .count()
+    }
+
+    /// Every line on every face of a few generated cubes.
+    fn all_lines(size: i32, level: u32, salts: u64) -> Vec<Line> {
+        let mut out = Vec::new();
+        for salt in 0..salts {
+            let p = Puzzle::generate_with(level, salt, GridSize::Fixed(size));
+            for f in 0..FACE_COUNT {
+                out.extend(p.face(f).lines().iter().cloned());
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn some_lines_are_long_and_wind_a_lot() {
+        for size in [8, 12, 16] {
+            let params = LevelParams::for_level_with(10, GridSize::Fixed(size));
+            let lines = all_lines(size, 10, 4);
+            let longest = lines.iter().map(|l| l.cells.len()).max().unwrap();
+            let most_bends = lines.iter().map(|l| bends(&l.cells)).max().unwrap();
+            assert!(
+                longest >= params.long_len / 2 + params.long_len / 4,
+                "{size}x{size}: longest line is only {longest} cells"
+            );
+            assert!(
+                most_bends >= 8,
+                "{size}x{size}: most winding line has only {most_bends} bends"
+            );
+        }
+    }
+
+    #[test]
+    fn some_lines_stretch_across_a_whole_face() {
+        // A line touches both opposite edges of its face, in either direction.
+        for size in [6, 8, 12, 16] {
+            let lines = all_lines(size, 10, 4);
+            let spans = |l: &Line| {
+                let (mut x0, mut x1, mut y0, mut y1) = (size, 0, size, 0);
+                for &(x, y) in &l.cells {
+                    x0 = x0.min(x);
+                    x1 = x1.max(x);
+                    y0 = y0.min(y);
+                    y1 = y1.max(y);
+                }
+                (x0 == 0 && x1 == size - 1) || (y0 == 0 && y1 == size - 1)
+            };
+            assert!(
+                lines.iter().any(spans),
+                "{size}x{size}: no line spans a whole face"
+            );
+        }
+    }
+
+    #[test]
+    fn lines_are_longer_and_bendier_than_before_on_average() {
+        // The old generator averaged about 4.5 cells and 1.5 bends on 12x12.
+        let lines = all_lines(12, 13, 4);
+        let n = lines.len() as f32;
+        let avg_len = lines.iter().map(|l| l.cells.len()).sum::<usize>() as f32 / n;
+        let avg_bends = lines.iter().map(|l| bends(&l.cells)).sum::<usize>() as f32 / n;
+        assert!(avg_len >= 5.5, "average length is {avg_len:.1}");
+        assert!(avg_bends >= 1.7, "average bends is {avg_bends:.2}");
     }
 
     #[test]
@@ -810,7 +1016,7 @@ mod tests {
                 sum += coverage(&Puzzle::generate_with(3, salt, GridSize::Fixed(n)));
             }
             let avg = sum / 4.0;
-            assert!(avg >= 0.6, "{n}x{n} is only {:.0}% covered", avg * 100.0);
+            assert!(avg >= 0.8, "{n}x{n} is only {:.0}% covered", avg * 100.0);
         }
     }
 

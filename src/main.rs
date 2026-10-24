@@ -42,6 +42,61 @@ fn draw_poly(p: &Poly) {
     }
 }
 
+/// The two buttons beside the grid-size readout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GridButton {
+    Smaller,
+    Bigger,
+}
+
+const BUTTON_SIZE: Vec2 = vec2(30.0, 28.0);
+const BUTTON_Y: f32 = 88.0;
+
+fn button_rect(button: GridButton) -> Rect {
+    let x = match button {
+        GridButton::Smaller => 78.0,
+        GridButton::Bigger => 114.0,
+    };
+    Rect::new(x, BUTTON_Y, BUTTON_SIZE.x, BUTTON_SIZE.y)
+}
+
+fn button_at(p: Vec2) -> Option<GridButton> {
+    [GridButton::Smaller, GridButton::Bigger]
+        .into_iter()
+        .find(|&b| button_rect(b).contains(p))
+}
+
+fn change_grid(game: &mut Game, button: GridButton) {
+    let grid = game.grid;
+    match button {
+        GridButton::Smaller if grid.can_shrink() => game.set_grid(grid.smaller()),
+        GridButton::Bigger if grid.can_grow() => game.set_grid(grid.bigger()),
+        _ => {}
+    }
+}
+
+fn draw_grid_button(button: GridButton, enabled: bool, hovered: bool) {
+    let r = button_rect(button);
+    let fill = match (enabled, hovered) {
+        (false, _) => Color::new(0.12, 0.15, 0.22, 1.0),
+        (true, false) => Color::new(0.20, 0.26, 0.38, 1.0),
+        (true, true) => Color::new(0.30, 0.38, 0.54, 1.0),
+    };
+    draw_rectangle(r.x, r.y, r.w, r.h, fill);
+    draw_rectangle_lines(r.x, r.y, r.w, r.h, 2.0, Color::new(0.34, 0.42, 0.56, 1.0));
+    let ink = if enabled {
+        Color::new(0.90, 0.94, 1.0, 1.0)
+    } else {
+        Color::new(0.35, 0.40, 0.52, 1.0)
+    };
+    // Drawn as shapes so it does not depend on the font having a minus sign.
+    let (cx, cy) = (r.x + r.w * 0.5, r.y + r.h * 0.5);
+    draw_line(cx - 6.0, cy, cx + 6.0, cy, 3.0, ink);
+    if button == GridButton::Bigger {
+        draw_line(cx, cy - 6.0, cx, cy + 6.0, 3.0, ink);
+    }
+}
+
 fn draw_centered(text: &str, y: f32, size: f32, color: Color) {
     let dims = measure_text(text, None, size as u16, 1.0);
     draw_text(text, (screen_width() - dims.width) * 0.5, y, size, color);
@@ -57,6 +112,8 @@ async fn main() {
     let mut last_pos = Vec2::ZERO;
     // Rotation speed carried on after a drag is released, in rad/s.
     let mut spin = Vec2::ZERO;
+    // A grid button the pointer went down on, finished when it comes up.
+    let mut ui_press: Option<GridButton> = None;
 
     loop {
         let dt = get_frame_time().min(0.05);
@@ -78,6 +135,12 @@ async fn main() {
         }
         if is_key_pressed(KeyCode::H) {
             game.show_hint();
+        }
+        if is_key_pressed(KeyCode::LeftBracket) {
+            change_grid(&mut game, GridButton::Smaller);
+        }
+        if is_key_pressed(KeyCode::RightBracket) {
+            change_grid(&mut game, GridButton::Bigger);
         }
         if is_key_pressed(KeyCode::V) {
             view.reset();
@@ -112,10 +175,15 @@ async fn main() {
 
         // Mouse: a short press is a click, a longer move is a drag-to-rotate.
         if is_mouse_button_pressed(MouseButton::Left) {
-            press_pos = Some(mouse);
-            dragging = false;
-            last_pos = mouse;
-            spin = Vec2::ZERO;
+            if let Some(button) = button_at(mouse) {
+                // Over a button: this press belongs to the button, not the cube.
+                ui_press = Some(button);
+            } else {
+                press_pos = Some(mouse);
+                dragging = false;
+                last_pos = mouse;
+                spin = Vec2::ZERO;
+            }
         }
         if is_mouse_button_down(MouseButton::Left) {
             if let Some(start) = press_pos {
@@ -137,7 +205,11 @@ async fn main() {
             spin = Vec2::ZERO;
         }
         if is_mouse_button_released(MouseButton::Left) {
-            if press_pos.is_some() && !dragging {
+            if let Some(button) = ui_press.take() {
+                if button_at(mouse) == Some(button) {
+                    change_grid(&mut game, button);
+                }
+            } else if press_pos.is_some() && !dragging {
                 if level_done {
                     game.next_level();
                 } else if let Some(id) = pick(&game, &view, [mx, my]) {
@@ -157,7 +229,7 @@ async fn main() {
             BACKGROUND[2],
             BACKGROUND[3],
         ));
-        let hover = if press_pos.is_none() {
+        let hover = if press_pos.is_none() && button_at(mouse).is_none() {
             pick(&game, &view, [mx, my])
         } else {
             None
@@ -182,6 +254,25 @@ async fn main() {
             24.0,
             dim,
         );
+        draw_text("Grid", 24.0, BUTTON_Y + 21.0, 24.0, dim);
+        let over = button_at(mouse);
+        draw_grid_button(
+            GridButton::Smaller,
+            game.grid.can_shrink(),
+            over == Some(GridButton::Smaller),
+        );
+        draw_grid_button(
+            GridButton::Bigger,
+            game.grid.can_grow(),
+            over == Some(GridButton::Bigger),
+        );
+        draw_text(
+            game.grid.label(game.puzzle.size()),
+            156.0,
+            BUTTON_Y + 21.0,
+            24.0,
+            soft,
+        );
         draw_centered(
             "Drag: rotate    Click an arrow: slide it off    Wheel: zoom",
             screen_height() - 44.0,
@@ -189,7 +280,7 @@ async fn main() {
             dim,
         );
         draw_centered(
-            "U: undo    H: hint    R: restart    V: reset view    Esc: quit",
+            "U: undo    H: hint    R: restart    V: reset view    [ ]: grid size    Esc: quit",
             screen_height() - 20.0,
             20.0,
             dim,

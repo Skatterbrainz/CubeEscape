@@ -23,6 +23,12 @@ pub const MIN_FACE_SIZE: i32 = 6;
 /// Cells per side of each face once levels have grown as far as they go.
 pub const MAX_FACE_SIZE: i32 = 12;
 
+/// Smallest grid the player can pick.
+pub const MIN_GRID_SIZE: i32 = 4;
+
+/// Largest grid the player can pick.
+pub const MAX_GRID_SIZE: i32 = 16;
+
 /// Number of distinct line colours the generator hands out.
 pub const PALETTE_SIZE: usize = 10;
 
@@ -223,6 +229,51 @@ impl Rng {
     }
 }
 
+/// How many cells each face has on a side: either grown automatically with
+/// the level, or fixed by the player.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GridSize {
+    /// Start small and grow as levels rise (`MIN_FACE_SIZE` to `MAX_FACE_SIZE`).
+    Auto,
+    /// The same `n x n` grid on every level.
+    Fixed(i32),
+}
+
+impl GridSize {
+    /// One step up the selector: Auto, then 4, 5, ... up to the largest grid.
+    pub fn bigger(self) -> GridSize {
+        match self {
+            GridSize::Auto => GridSize::Fixed(MIN_GRID_SIZE),
+            GridSize::Fixed(n) => GridSize::Fixed((n + 1).clamp(MIN_GRID_SIZE, MAX_GRID_SIZE)),
+        }
+    }
+
+    /// One step down the selector, ending at Auto.
+    pub fn smaller(self) -> GridSize {
+        match self {
+            GridSize::Auto => GridSize::Auto,
+            GridSize::Fixed(n) if n <= MIN_GRID_SIZE => GridSize::Auto,
+            GridSize::Fixed(n) => GridSize::Fixed(n.min(MAX_GRID_SIZE) - 1),
+        }
+    }
+
+    pub fn can_grow(self) -> bool {
+        self != GridSize::Fixed(MAX_GRID_SIZE)
+    }
+
+    pub fn can_shrink(self) -> bool {
+        self != GridSize::Auto
+    }
+
+    /// Text for the screen; `current` is the size actually in use.
+    pub fn label(self, current: i32) -> String {
+        match self {
+            GridSize::Auto => format!("Auto ({current}x{current})"),
+            GridSize::Fixed(n) => format!("{n}x{n}"),
+        }
+    }
+}
+
 /// Difficulty knobs for a level.
 #[derive(Clone, Copy, Debug)]
 pub struct LevelParams {
@@ -239,6 +290,15 @@ impl LevelParams {
             size: (MIN_FACE_SIZE + ((level - 1) / 2) as i32).min(MAX_FACE_SIZE),
             max_len: (4 + (level / 2) as usize).min(12),
         }
+    }
+
+    /// Like `for_level`, but with the grid size the player asked for.
+    pub fn for_level_with(level: u32, grid: GridSize) -> LevelParams {
+        let mut params = LevelParams::for_level(level);
+        if let GridSize::Fixed(n) = grid {
+            params.size = n.clamp(MIN_GRID_SIZE, MAX_GRID_SIZE);
+        }
+        params
     }
 }
 
@@ -398,7 +458,13 @@ pub struct Puzzle {
 impl Puzzle {
     /// Build a level. The same `(level, salt)` always gives the same puzzle.
     pub fn generate(level: u32, salt: u64) -> Puzzle {
-        let params = LevelParams::for_level(level);
+        Puzzle::generate_with(level, salt, GridSize::Auto)
+    }
+
+    /// Build a level with a chosen grid size. The same arguments always give
+    /// the same puzzle.
+    pub fn generate_with(level: u32, salt: u64, grid: GridSize) -> Puzzle {
+        let params = LevelParams::for_level_with(level, grid);
         let faces = (0..FACE_COUNT)
             .map(|f| {
                 let seed = (level as u64) * 1_000_003 + (f as u64) * 7_919 + salt * 31 + 17;
@@ -410,6 +476,11 @@ impl Puzzle {
 
     pub fn level(&self) -> u32 {
         self.level
+    }
+
+    /// Cells per side of each face.
+    pub fn size(&self) -> i32 {
+        self.faces[0].size()
     }
 
     pub fn face(&self, face: usize) -> &Face {
@@ -641,6 +712,105 @@ mod tests {
                 "level {level}: too few blocked lines"
             );
             assert!(!p.removable().is_empty(), "level {level} has no free lines");
+        }
+    }
+
+    #[test]
+    fn grid_selector_steps_through_every_size_and_stops_at_the_ends() {
+        let mut g = GridSize::Auto;
+        assert!(!g.can_shrink());
+        assert_eq!(g.smaller(), GridSize::Auto);
+        let mut seen = Vec::new();
+        while g.can_grow() {
+            g = g.bigger();
+            if let GridSize::Fixed(n) = g {
+                seen.push(n);
+            }
+        }
+        assert_eq!(seen, (MIN_GRID_SIZE..=MAX_GRID_SIZE).collect::<Vec<_>>());
+        assert_eq!(g.bigger(), g, "cannot grow past the largest grid");
+        // And back down to Auto again.
+        for n in (MIN_GRID_SIZE..MAX_GRID_SIZE).rev() {
+            g = g.smaller();
+            assert_eq!(g, GridSize::Fixed(n));
+        }
+        assert_eq!(g.smaller(), GridSize::Auto);
+    }
+
+    #[test]
+    fn grid_labels_name_the_size_in_use() {
+        assert_eq!(GridSize::Auto.label(6), "Auto (6x6)");
+        assert_eq!(GridSize::Fixed(9).label(6), "9x9");
+    }
+
+    #[test]
+    fn a_fixed_grid_size_overrides_the_level_and_is_kept_in_range() {
+        for level in [1, 9, 30] {
+            let p = Puzzle::generate_with(level, 0, GridSize::Fixed(7));
+            assert_eq!(p.size(), 7);
+            assert_eq!(p.level(), level);
+        }
+        assert_eq!(
+            Puzzle::generate_with(1, 0, GridSize::Fixed(1)).size(),
+            MIN_GRID_SIZE
+        );
+        assert_eq!(
+            Puzzle::generate_with(1, 0, GridSize::Fixed(99)).size(),
+            MAX_GRID_SIZE
+        );
+        // Auto is exactly what `generate` has always done.
+        for level in [1, 6, 14] {
+            let a = Puzzle::generate(level, 0);
+            let b = Puzzle::generate_with(level, 0, GridSize::Auto);
+            assert_eq!(a.size(), b.size());
+            assert_eq!(a.total(), b.total());
+        }
+    }
+
+    #[test]
+    fn every_selectable_grid_size_makes_solvable_well_formed_levels() {
+        for n in MIN_GRID_SIZE..=MAX_GRID_SIZE {
+            for level in [1, 7, 15] {
+                for salt in 0..2 {
+                    let mut p = Puzzle::generate_with(level, salt, GridSize::Fixed(n));
+                    assert_eq!(p.size(), n);
+                    assert!(p.total() > 0, "{n}x{n} level {level} is empty");
+                    for f in 0..FACE_COUNT {
+                        let face = p.face(f);
+                        let mut seen = std::collections::HashSet::new();
+                        for (i, l) in face.lines().iter().enumerate() {
+                            assert!(l.cells.len() >= 2);
+                            for &(x, y) in &l.cells {
+                                assert!(face.contains(x, y));
+                                assert!(seen.insert((x, y)), "cell used twice");
+                            }
+                            assert_ne!(face.blocker(i), Some(i));
+                        }
+                    }
+                    loop {
+                        let free = p.removable();
+                        if free.is_empty() {
+                            break;
+                        }
+                        for id in free {
+                            p.remove(id);
+                        }
+                    }
+                    assert!(p.is_solved(), "{n}x{n} level {level} salt {salt} is stuck");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_selectable_grid_size_is_reasonably_full() {
+        for n in MIN_GRID_SIZE..=MAX_GRID_SIZE {
+            let mut sum = 0.0;
+            for salt in 0..4 {
+                sum += coverage(&Puzzle::generate_with(3, salt, GridSize::Fixed(n)));
+            }
+            let avg = sum / 4.0;
+            assert!(avg >= 0.6, "{n}x{n} is only {:.0}% covered", avg * 100.0);
         }
     }
 

@@ -1,7 +1,7 @@
 //! Game state on top of the puzzle: level progression, undo, mistakes and the
 //! short-lived animation state (sliding lines, shakes, flashes, hints).
 
-use crate::puzzle::{LineId, Puzzle};
+use crate::puzzle::{GridSize, LineId, Puzzle};
 
 /// Seconds a removed line takes to slide off the cube.
 pub const SLIDE_DURATION: f32 = 0.7;
@@ -62,15 +62,22 @@ pub struct Game {
     pub shakes: Vec<Shake>,
     pub flash: Option<Flash>,
     pub hint: Option<HintGlow>,
+    /// The grid size the player chose; kept across levels and restarts.
+    pub grid: GridSize,
     history: Vec<LineId>,
 }
 
 impl Game {
     pub fn new(level: u32) -> Game {
+        Game::with_grid(level, GridSize::Auto)
+    }
+
+    pub fn with_grid(level: u32, grid: GridSize) -> Game {
         let level = level.max(1);
         Game {
-            puzzle: Puzzle::generate(level, 0),
+            puzzle: Puzzle::generate_with(level, 0, grid),
             level,
+            grid,
             mistakes: 0,
             moves: 0,
             time: 0.0,
@@ -164,12 +171,20 @@ impl Game {
 
     /// Start the current level over.
     pub fn restart(&mut self) {
-        *self = Game::new(self.level);
+        *self = Game::with_grid(self.level, self.grid);
     }
 
     /// Move on to the next level.
     pub fn next_level(&mut self) {
-        *self = Game::new(self.level + 1);
+        *self = Game::with_grid(self.level + 1, self.grid);
+    }
+
+    /// Switch grid size. The current level starts over on the new grid, since
+    /// progress on the old one cannot carry across.
+    pub fn set_grid(&mut self, grid: GridSize) {
+        if grid != self.grid {
+            *self = Game::with_grid(self.level, grid);
+        }
     }
 }
 
@@ -258,6 +273,44 @@ mod tests {
         assert!(g.shakes.is_empty());
         assert!(g.flash.is_none());
         assert!(g.hint.is_none());
+    }
+
+    #[test]
+    fn changing_the_grid_restarts_the_level_on_the_new_size() {
+        let mut g = Game::new(3);
+        let auto_size = g.puzzle.size();
+        let id = g.puzzle.removable()[0];
+        g.click(id);
+        assert_eq!(g.moves, 1);
+
+        g.set_grid(GridSize::Fixed(auto_size + 3));
+        assert_eq!(g.puzzle.size(), auto_size + 3);
+        assert_eq!(g.level, 3, "same level");
+        assert_eq!(g.moves, 0, "progress is reset");
+        assert_eq!(g.puzzle.remaining(), g.puzzle.total());
+        assert!(!g.undo(), "old history is gone");
+    }
+
+    #[test]
+    fn choosing_the_same_grid_again_does_not_wipe_progress() {
+        let mut g = Game::with_grid(3, GridSize::Fixed(7));
+        let id = g.puzzle.removable()[0];
+        g.click(id);
+        g.set_grid(GridSize::Fixed(7));
+        assert_eq!(g.moves, 1);
+    }
+
+    #[test]
+    fn the_chosen_grid_survives_restart_and_next_level() {
+        let mut g = Game::with_grid(2, GridSize::Fixed(9));
+        g.restart();
+        assert_eq!((g.puzzle.size(), g.grid), (9, GridSize::Fixed(9)));
+        g.next_level();
+        assert_eq!(g.level, 3);
+        assert_eq!((g.puzzle.size(), g.grid), (9, GridSize::Fixed(9)));
+        g.set_grid(GridSize::Auto);
+        g.next_level();
+        assert_eq!(g.grid, GridSize::Auto);
     }
 
     #[test]

@@ -19,7 +19,7 @@ red, and you pick up a mistake. There is no timer.
 | `H` | Hint: highlight an arrow you can remove right now |
 | `R` | Restart the level |
 | `V` | Reset the view |
-| `[` / `]`, or the `-` / `+` buttons | Choose the grid size: Auto, then 4x4 up to 16x16. Changing it restarts the current level on the new grid |
+| `[` / `]`, or the `-` / `+` buttons | Choose the grid size: Auto, then 4x4 up to 16x16 (the game starts on 10x10). Changing it restarts the current level on the new grid |
 | Enter / Space / click | Next level, once a level is cleared |
 | `Esc` | Quit |
 
@@ -56,8 +56,9 @@ The code is split so that nothing but `src/main.rs` touches the window:
 
 ### How levels are made
 
-Each face is an `N x N` grid (by default 6 on level 1, growing to 12 as levels
-rise; the player can instead fix it anywhere from 4 to 16).
+Each face is an `N x N` grid. The game starts on 10x10. The player can pick any
+size from 4 to 16, or choose Auto, which starts at 6 on level 1 and grows to 12
+as levels rise.
 
 The generator first lays down a handful of long winding arrows. They prefer to
 keep going straight and to hug walls and tight spots, so they sweep across much

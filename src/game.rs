@@ -69,7 +69,7 @@ pub struct Game {
 
 impl Game {
     pub fn new(level: u32) -> Game {
-        Game::with_grid(level, GridSize::Auto)
+        Game::with_grid(level, GridSize::default())
     }
 
     pub fn with_grid(level: u32, grid: GridSize) -> Game {
@@ -273,6 +273,27 @@ mod tests {
         assert!(g.shakes.is_empty());
         assert!(g.flash.is_none());
         assert!(g.hint.is_none());
+    }
+
+    #[test]
+    fn a_new_game_starts_on_a_ten_by_ten_grid_at_every_level() {
+        for level in [1, 2, 9, 25] {
+            let g = Game::new(level);
+            assert_eq!(g.grid, GridSize::Fixed(10));
+            assert_eq!(g.puzzle.size(), 10, "level {level}");
+        }
+    }
+
+    #[test]
+    fn auto_can_still_be_chosen_and_then_grows_with_the_level() {
+        let mut g = Game::new(1);
+        g.set_grid(GridSize::Auto);
+        let first = g.puzzle.size();
+        for _ in 0..10 {
+            g.next_level();
+        }
+        assert_eq!(g.grid, GridSize::Auto);
+        assert!(g.puzzle.size() > first, "Auto should grow as levels rise");
     }
 
     #[test]

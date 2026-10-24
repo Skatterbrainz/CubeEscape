@@ -23,3 +23,5 @@ Each of these should be a distinct commit and corresponding pull request.
    1. Example: if starting at 36 arrows and clicks > 36 = lose
    2. If lose: Prompt to start level again
    3. Keep score of wins and losses
+8. Support for more platforms
+   1. More Linux distros, Wayland

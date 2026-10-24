@@ -7,6 +7,13 @@ click it to slide it off. Clear every arrow on all six faces to finish the
 level. Click one that is blocked and it shakes, the arrow in its way flashes
 red, and you pick up a mistake. There is no timer.
 
+## Requirements
+
+- Linux platform (tested on Linux Mint 22)
+- Rust 1.82 or newer
+- C toolchain for linking
+- Support for OpenGL and X11
+
 ## Controls
 
 | Input | Action |

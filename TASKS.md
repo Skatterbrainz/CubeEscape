@@ -21,6 +21,7 @@ cleanly after one task.
 
 - [x] Longer, windier arrows: long winding arrows that can run most of the way across a face, with many bends; faces about 96% full
 - [x] Grid size selector: Auto or fixed 4x4 to 16x16, with `[` `]` keys and on-screen -/+ buttons
+- [x] Window icon from `assets/cube_escape_icon.png`, with a script that makes the square transparent 16/32/64/256 px set
 - [x] Default grid is 10x10 (Auto is still on the selector)
 - [x] Larger grids: 6x6 per face on level 1, growing to 12x12; longer arrows; cube drawn larger; zoom up to 3x
 
@@ -67,9 +68,9 @@ cleanly after one task.
 ## Packaging for the Mint Software Manager (do in order)
 
 - [ ] **I. App icon** (S)
-  An original SVG icon plus PNGs. It must not resemble any other game's art.
+  The artwork and a 256 px square transparent PNG already exist (`assets/icons/`). What is left is an SVG (or a 128 px PNG plus the 256 px one, which Flathub accepts) installed under the app ID name.
   Touches: new `packaging/` folder.
-  *Done when:* SVG and 128px PNG exist and look right at small sizes.
+  *Done when:* the icon installs as `<app-id>.png` or `.svg` and looks right at small sizes.
 
 - [ ] **J. Desktop entry and AppStream metadata** (M)
   `.desktop` file and `.metainfo.xml` with description, screenshots (use `examples/snapshot.rs`), content rating and release entry.

@@ -58,8 +58,10 @@ The code is split so that nothing but `src/main.rs` touches the window:
 | `src/puzzle.rs` | Grid, arrows, blocking rule, level generator |
 | `src/game.rs` | Level progression, undo, mistakes, animation timers |
 | `src/scene.rs` | Cube rotation, projection, picking, polygon output |
+| `src/icon.rs` | Decodes the window icon (raw pixels, no window code) |
 | `src/main.rs` | Window, mouse and keyboard, text (macroquad) |
 | `examples/snapshot.rs` | Headless PNG renderer for checking the look |
+| `assets/` | The original icon artwork, `make_icons.sh`, and the square transparent icons it makes in `assets/icons/` |
 
 ### How levels are made
 

@@ -20,7 +20,9 @@ Each of these should be a distinct commit and corresponding pull request.
    1. Example: if starting at 36 arrows and clicks > 36 = lose
    2. If lose: Prompt to start level again
    3. Keep score of wins and losses
-6. Support for more platforms
+6. Add a 2D map option (flat)
+   1. Default to 16 x 16 or higher
+7. Support for more platforms
    1. More Linux distros, Wayland
 
 # Completed

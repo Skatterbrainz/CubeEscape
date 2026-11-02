@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Cube Escape
+GenericName=Puzzle game
+Comment=Rotate the cube and slide the arrows away, one clear path at a time
+Exec="@EXEC@"
+Icon=cube-escape
+Terminal=false
+Categories=Game;LogicGame;
+Keywords=puzzle;cube;arrows;3d;
+StartupWMClass=cube-escape

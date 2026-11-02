@@ -45,6 +45,19 @@ cargo run --release
 
 The window uses OpenGL and X11, which a normal Mint desktop already has.
 
+### Menu entry and panel icon (optional)
+
+To get "Cube Escape" in your application menu, with its icon, and to pin it to
+the panel, install a menu entry for your user. It needs no `sudo` and only
+writes under `~/.local/share`:
+
+```sh
+cargo build --release
+sh packaging/install-local.sh
+```
+
+Remove it again with `sh packaging/install-local.sh --uninstall`.
+
 ## Development
 
 ```sh
@@ -62,6 +75,7 @@ The code is split so that nothing but `src/main.rs` touches the window:
 | `src/scene.rs` | Cube rotation, projection, picking, polygon output |
 | `src/icon.rs` | Decodes the window icon (raw pixels, no window code) |
 | `src/main.rs` | Window, mouse and keyboard, text (macroquad) |
+| `packaging/` | Desktop menu entry template and a per-user install script |
 | `examples/snapshot.rs` | Headless PNG renderer for checking the look |
 | `assets/` | The original icon artwork, `make_icons.sh`, and the square transparent icons it makes in `assets/icons/` |
 

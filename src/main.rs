@@ -4,7 +4,7 @@
 
 use cube_escape::game::{ClickResult, Game};
 use cube_escape::scene::{build_scene, pick, Poly, View, BACKGROUND};
-use cube_escape::GAME_TITLE;
+use cube_escape::{APP_ID, GAME_TITLE};
 use macroquad::prelude::*;
 
 /// Pixels the pointer must travel before a press counts as a drag.
@@ -23,6 +23,12 @@ fn window_conf() -> Conf {
         high_dpi: true,
         sample_count: 4,
         window_resizable: true,
+        platform: macroquad::miniquad::conf::Platform {
+            // Gives the window its own class (and Wayland app id) instead of
+            // the shared default, so panels can match it to the icon.
+            linux_wm_class: APP_ID,
+            ..Default::default()
+        },
         icon: Some(macroquad::miniquad::conf::Icon {
             small: icon.small,
             medium: icon.medium,

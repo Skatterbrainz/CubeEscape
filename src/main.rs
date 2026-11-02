@@ -133,6 +133,9 @@ async fn main() {
         let (mx, my) = mouse_position();
         let mouse = vec2(mx, my);
         let level_done = game.is_solved() && !game.is_animating();
+        // Wait for the last blocked arrow to stop shaking before asking
+        // whether to try again, so a quick extra click cannot skip it.
+        let level_lost = game.is_lost() && game.shakes.is_empty();
 
         if is_key_pressed(KeyCode::Escape) {
             break;
@@ -164,6 +167,9 @@ async fn main() {
                 || is_key_pressed(KeyCode::N))
         {
             game.next_level();
+        }
+        if level_lost && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::Space)) {
+            game.restart();
         }
         let turn = KEY_TURN_SPEED * dt;
         if is_key_down(KeyCode::Left) || is_key_down(KeyCode::A) {
@@ -224,6 +230,8 @@ async fn main() {
             } else if press_pos.is_some() && !dragging {
                 if level_done {
                     game.next_level();
+                } else if level_lost {
+                    game.restart();
                 } else if let Some(id) = pick(&game, &view, [mx, my]) {
                     let _: ClickResult = game.click(id);
                 }
@@ -254,17 +262,34 @@ async fn main() {
         let soft = Color::new(0.80, 0.85, 0.95, 1.0);
         let dim = Color::new(0.55, 0.60, 0.72, 1.0);
         draw_text(GAME_TITLE.to_uppercase(), 24.0, 44.0, 38.0, soft);
+        let level_text = format!(
+            "Level {}    Arrows left: {}",
+            game.level,
+            game.puzzle.remaining()
+        );
+        draw_text(&level_text, 24.0, 74.0, 24.0, dim);
+        // Mistakes turn red when only a couple of tries are left.
+        let mistake_color = if game.tries_left() <= 2 {
+            Color::new(1.0, 0.45, 0.45, 1.0)
+        } else {
+            dim
+        };
+        let level_line = measure_text(&level_text, None, 24, 1.0);
         draw_text(
-            format!(
-                "Level {}    Arrows left: {}    Mistakes: {}",
-                game.level,
-                game.puzzle.remaining(),
-                game.mistakes
-            ),
-            24.0,
+            format!("    Mistakes: {} / {}", game.mistakes, game.mistake_limit),
+            24.0 + level_line.width,
             74.0,
             24.0,
-            dim,
+            mistake_color,
+        );
+        let score = format!("Wins {}   Losses {}", game.score.wins, game.score.losses);
+        let score_dims = measure_text(&score, None, 26, 1.0);
+        draw_text(
+            score,
+            screen_width() - score_dims.width - 24.0,
+            44.0,
+            26.0,
+            soft,
         );
         draw_text("Grid", 24.0, BUTTON_Y + 21.0, 24.0, dim);
         let over = button_at(mouse);
@@ -320,6 +345,39 @@ async fn main() {
             );
             draw_centered(
                 "Click or press Enter for the next level",
+                screen_height() * 0.45 + 84.0,
+                26.0,
+                soft,
+            );
+        }
+
+        if level_lost {
+            draw_rectangle(
+                0.0,
+                0.0,
+                screen_width(),
+                screen_height(),
+                Color::new(0.06, 0.02, 0.03, 0.78),
+            );
+            draw_centered(
+                "Out of tries",
+                screen_height() * 0.45,
+                64.0,
+                Color::new(1.0, 0.45, 0.45, 1.0),
+            );
+            draw_centered(
+                &format!(
+                    "Level {}: {} failed clicks, {} arrows left",
+                    game.level,
+                    game.mistakes,
+                    game.puzzle.remaining()
+                ),
+                screen_height() * 0.45 + 40.0,
+                26.0,
+                soft,
+            );
+            draw_centered(
+                "Click or press Enter to try the level again",
                 screen_height() * 0.45 + 84.0,
                 26.0,
                 soft,

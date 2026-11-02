@@ -21,6 +21,7 @@ cleanly after one task.
 
 - [x] Longer, windier arrows: long winding arrows that can run most of the way across a face, with many bends; faces about 96% full
 - [x] Grid size selector: Auto or fixed 4x4 to 16x16, with `[` `]` keys and on-screen -/+ buttons
+- [x] Wins and losses: failed-click limit per level (a tenth of the arrows, at least 3), try-again prompt on a loss, running win/loss score
 - [x] Window icon from `assets/cube_escape_icon.png`, with a script that makes the square transparent 16/32/64/256 px set
 - [x] Default grid is 10x10 (Auto is still on the selector)
 - [x] Larger grids: 6x6 per face on level 1, growing to 12x12; longer arrows; cube drawn larger; zoom up to 3x
@@ -44,7 +45,7 @@ cleanly after one task.
 ## Gameplay polish (any order, all independent)
 
 - [ ] **D. Save progress** (S)
-  Remember the highest level reached and the chosen grid size in `$XDG_DATA_HOME` (or `~/.local/share`) as a tiny text file, and resume there. Add a round-trip test that uses a temp dir.
+  Remember the highest level reached, the chosen grid size and the win/loss score in `$XDG_DATA_HOME` (or `~/.local/share`) as a tiny text file, and resume there. Add a round-trip test that uses a temp dir.
   Touches: new `src/save.rs`, `src/main.rs`.
   *Done when:* quitting and relaunching continues from the same level.
 

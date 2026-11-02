@@ -7,6 +7,22 @@ click it to slide it off. Clear every arrow on all six faces to finish the
 level. Click one that is blocked and it shakes, the arrow in its way flashes
 red, and you pick up a mistake. There is no timer.
 
+## Winning and losing
+
+Every level has a limit on failed clicks: a tenth of its arrows, rounded up,
+and never fewer than 3 (13 on a fresh 10x10 level with 130 arrows). Clear the
+cube before you reach the limit and you win. Reach it and you lose, and the
+game offers to start the level again. The `Mistakes: 3 / 13` readout turns red
+when two or fewer tries are left, and the running `Wins` and `Losses` total is
+shown at the top right.
+
+- Undo gives back a removed arrow but not a failed click, and hints are free
+- Restarting, changing the grid size, or pressing `R` mid-level counts as
+  neither a win nor a loss
+- A finished level is final: no undo after a win, no clicks after a loss
+- The score is kept for the session only; saving it between launches is the
+  save-progress task in `TASKS.md`
+
 <img src="./assets/Cube Escape_001.png" alt="Cube Escape" />
 
 ## Requirements
@@ -29,7 +45,7 @@ red, and you pick up a mistake. There is no timer.
 | `R` | Restart the level |
 | `V` | Reset the view |
 | `[` / `]`, or the `-` / `+` buttons | Choose the grid size: Auto, then 4x4 up to 16x16 (the game starts on 10x10). Changing it restarts the current level on the new grid |
-| Enter / Space / click | Next level, once a level is cleared |
+| Enter / Space / click | Next level once a level is cleared, or try again after a loss |
 | `Esc` | Quit |
 
 ## Build and run

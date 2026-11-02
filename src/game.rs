@@ -12,6 +12,36 @@ pub const FLASH_DURATION: f32 = 0.8;
 /// Seconds a hint stays highlighted.
 pub const HINT_DURATION: f32 = 1.8;
 
+/// Share of a level's arrows the player may click wrongly before losing.
+pub const MISTAKE_ALLOWANCE: f32 = 0.10;
+/// The fewest failed clicks a level ever allows, however small it is.
+pub const MIN_MISTAKE_LIMIT: u32 = 3;
+
+/// How many failed clicks lose a level with `arrows` arrows on it: a tenth of
+/// them, rounded up, and never fewer than `MIN_MISTAKE_LIMIT`.
+pub fn mistake_limit_for(arrows: usize) -> u32 {
+    ((arrows as f32 * MISTAKE_ALLOWANCE).ceil() as u32).max(MIN_MISTAKE_LIMIT)
+}
+
+/// How the current level stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    /// Still being played.
+    Playing,
+    /// Every arrow is off.
+    Won,
+    /// The failed clicks reached the limit before the cube was cleared.
+    Lost,
+}
+
+/// Running tally of finished levels. It outlives restarts, new levels and
+/// grid changes; it is not saved between launches yet.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Score {
+    pub wins: u32,
+    pub losses: u32,
+}
+
 /// A line that has been removed and is still sliding off.
 #[derive(Clone, Copy, Debug)]
 pub struct SlideAnim {
@@ -64,6 +94,10 @@ pub struct Game {
     pub hint: Option<HintGlow>,
     /// The grid size the player chose; kept across levels and restarts.
     pub grid: GridSize,
+    /// Failed clicks that lose this level.
+    pub mistake_limit: u32,
+    pub outcome: Outcome,
+    pub score: Score,
     history: Vec<LineId>,
 }
 
@@ -73,11 +107,20 @@ impl Game {
     }
 
     pub fn with_grid(level: u32, grid: GridSize) -> Game {
+        Game::with_score(level, grid, Score::default())
+    }
+
+    /// A fresh level that carries an existing score along.
+    pub fn with_score(level: u32, grid: GridSize, score: Score) -> Game {
         let level = level.max(1);
+        let puzzle = Puzzle::generate_with(level, 0, grid);
         Game {
-            puzzle: Puzzle::generate_with(level, 0, grid),
+            mistake_limit: mistake_limit_for(puzzle.total()),
+            puzzle,
             level,
             grid,
+            outcome: Outcome::Playing,
+            score,
             mistakes: 0,
             moves: 0,
             time: 0.0,
@@ -118,6 +161,15 @@ impl Game {
         self.puzzle.is_solved()
     }
 
+    pub fn is_lost(&self) -> bool {
+        self.outcome == Outcome::Lost
+    }
+
+    /// Failed clicks the player can still make before losing.
+    pub fn tries_left(&self) -> u32 {
+        self.mistake_limit.saturating_sub(self.mistakes)
+    }
+
     /// True while any removed line is still sliding away.
     pub fn is_animating(&self) -> bool {
         !self.anims.is_empty()
@@ -126,11 +178,16 @@ impl Game {
     /// The player clicked a line: remove it if it is free, otherwise count a
     /// mistake and show what is in the way.
     pub fn click(&mut self, id: LineId) -> ClickResult {
-        if !self.puzzle.is_alive(id) {
+        // Once a level is won or lost, the result stands.
+        if self.outcome != Outcome::Playing || !self.puzzle.is_alive(id) {
             return ClickResult::Ignored;
         }
         if let Some(blocker) = self.puzzle.blocker(id) {
             self.mistakes += 1;
+            if self.mistakes >= self.mistake_limit {
+                self.outcome = Outcome::Lost;
+                self.score.losses += 1;
+            }
             self.shakes.retain(|s| s.id != id);
             self.shakes.push(Shake { id, t: 0.0 });
             self.flash = Some(Flash {
@@ -146,11 +203,19 @@ impl Game {
         if self.hint.is_some_and(|h| h.id == id) {
             self.hint = None;
         }
+        if self.puzzle.is_solved() {
+            self.outcome = Outcome::Won;
+            self.score.wins += 1;
+        }
         ClickResult::Removed
     }
 
-    /// Put the most recently removed line back.
+    /// Put the most recently removed line back. Failed clicks are not
+    /// refunded, and a finished level cannot be undone.
     pub fn undo(&mut self) -> bool {
+        if self.outcome != Outcome::Playing {
+            return false;
+        }
         match self.history.pop() {
             Some(id) => {
                 self.anims.retain(|a| a.id != id);
@@ -164,26 +229,30 @@ impl Game {
 
     /// Highlight a line that can be removed right now.
     pub fn show_hint(&mut self) {
+        if self.outcome != Outcome::Playing {
+            return;
+        }
         if let Some(&id) = self.puzzle.removable().first() {
             self.hint = Some(HintGlow { id, t: 0.0 });
         }
     }
 
-    /// Start the current level over.
+    /// Start the current level over. The score is kept; walking away from a
+    /// level that was still in play counts as neither a win nor a loss.
     pub fn restart(&mut self) {
-        *self = Game::with_grid(self.level, self.grid);
+        *self = Game::with_score(self.level, self.grid, self.score);
     }
 
     /// Move on to the next level.
     pub fn next_level(&mut self) {
-        *self = Game::with_grid(self.level + 1, self.grid);
+        *self = Game::with_score(self.level + 1, self.grid, self.score);
     }
 
     /// Switch grid size. The current level starts over on the new grid, since
-    /// progress on the old one cannot carry across.
+    /// progress on the old one cannot carry across. The score is kept.
     pub fn set_grid(&mut self, grid: GridSize) {
         if grid != self.grid {
-            *self = Game::with_grid(self.level, grid);
+            *self = Game::with_score(self.level, grid, self.score);
         }
     }
 }
@@ -202,6 +271,132 @@ mod tests {
             }
         }
         None
+    }
+
+    /// Click blocked arrows until the level is decided or `n` clicks are made.
+    fn make_mistakes(g: &mut Game, n: u32) {
+        for _ in 0..n {
+            let id = first_blocked(g).expect("a blocked arrow");
+            g.click(id);
+        }
+    }
+
+    #[test]
+    fn the_mistake_limit_is_a_tenth_of_the_arrows_but_never_below_three() {
+        assert_eq!(mistake_limit_for(0), 3);
+        assert_eq!(mistake_limit_for(20), 3);
+        assert_eq!(mistake_limit_for(30), 3);
+        assert_eq!(mistake_limit_for(31), 4, "rounded up");
+        assert_eq!(mistake_limit_for(130), 13);
+        assert_eq!(mistake_limit_for(1000), 100);
+        let g = Game::new(1);
+        assert_eq!(g.mistake_limit, mistake_limit_for(g.puzzle.total()));
+        assert_eq!(g.tries_left(), g.mistake_limit);
+    }
+
+    #[test]
+    fn running_out_of_tries_loses_the_level_and_counts_one_loss() {
+        let mut g = Game::new(3);
+        assert_eq!(g.outcome, Outcome::Playing);
+        let limit = g.mistake_limit;
+        make_mistakes(&mut g, limit - 1);
+        assert_eq!(g.outcome, Outcome::Playing, "one try still left");
+        assert_eq!(g.tries_left(), 1);
+        make_mistakes(&mut g, 1);
+        assert_eq!(g.outcome, Outcome::Lost);
+        assert!(g.is_lost());
+        assert_eq!(g.tries_left(), 0);
+        assert_eq!(g.score, Score { wins: 0, losses: 1 });
+        // Further clicks neither change anything nor count a second loss.
+        let before = (g.mistakes, g.puzzle.remaining());
+        let free = g.puzzle.removable()[0];
+        assert_eq!(g.click(free), ClickResult::Ignored);
+        make_mistakes(&mut g, 5);
+        assert_eq!((g.mistakes, g.puzzle.remaining()), before);
+        assert_eq!(g.score.losses, 1);
+    }
+
+    #[test]
+    fn clearing_every_arrow_wins_once() {
+        let mut g = Game::new(4);
+        while !g.is_solved() {
+            let id = g.puzzle.removable()[0];
+            assert_eq!(g.outcome, Outcome::Playing);
+            g.click(id);
+        }
+        assert_eq!(g.outcome, Outcome::Won);
+        assert_eq!(g.score, Score { wins: 1, losses: 0 });
+        // A won level is final: no undo that would let it be won again.
+        assert!(!g.undo());
+        assert!(g.puzzle.is_solved());
+        g.show_hint();
+        assert!(g.hint.is_none());
+        assert_eq!(g.score.wins, 1);
+    }
+
+    #[test]
+    fn a_win_with_mistakes_below_the_limit_is_still_a_win() {
+        let mut g = Game::new(4);
+        let limit = g.mistake_limit;
+        make_mistakes(&mut g, limit - 1);
+        while !g.is_solved() {
+            let id = g.puzzle.removable()[0];
+            g.click(id);
+        }
+        assert_eq!(g.outcome, Outcome::Won);
+        assert_eq!(g.score, Score { wins: 1, losses: 0 });
+    }
+
+    #[test]
+    fn the_score_survives_restart_next_level_and_grid_changes() {
+        let mut g = Game::new(2);
+        let limit = g.mistake_limit;
+        make_mistakes(&mut g, limit);
+        assert_eq!(g.score.losses, 1);
+        g.restart();
+        assert_eq!(
+            (g.outcome, g.mistakes, g.score.losses),
+            (Outcome::Playing, 0, 1)
+        );
+        while !g.is_solved() {
+            let id = g.puzzle.removable()[0];
+            g.click(id);
+        }
+        assert_eq!(g.score, Score { wins: 1, losses: 1 });
+        g.next_level();
+        assert_eq!(g.level, 3);
+        assert_eq!(g.score, Score { wins: 1, losses: 1 });
+        g.set_grid(GridSize::Fixed(6));
+        assert_eq!(g.score, Score { wins: 1, losses: 1 });
+        assert_eq!(g.outcome, Outcome::Playing);
+    }
+
+    #[test]
+    fn walking_away_from_a_level_in_play_is_not_a_loss() {
+        let mut g = Game::new(3);
+        make_mistakes(&mut g, 1);
+        g.restart();
+        g.set_grid(GridSize::Fixed(5));
+        assert_eq!(g.score, Score::default());
+    }
+
+    #[test]
+    fn failed_clicks_are_not_refunded_by_undo() {
+        let mut g = Game::new(3);
+        let id = g.puzzle.removable()[0];
+        g.click(id);
+        make_mistakes(&mut g, 2);
+        assert!(g.undo());
+        assert_eq!(g.mistakes, 2);
+    }
+
+    #[test]
+    fn a_new_level_gets_a_limit_that_fits_its_own_arrow_count() {
+        let small = Game::with_grid(1, GridSize::Fixed(4));
+        let large = Game::with_grid(1, GridSize::Fixed(16));
+        assert_eq!(small.mistake_limit, mistake_limit_for(small.puzzle.total()));
+        assert_eq!(large.mistake_limit, mistake_limit_for(large.puzzle.total()));
+        assert!(large.mistake_limit > small.mistake_limit);
     }
 
     #[test]
